@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  telegram-gif-bot:
+    build: .
+    container_name: telegram-gif-bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - GIPHY_API_KEY=${GIPHY_API_KEY}
+      - RESULTS_LIMIT=${RESULTS_LIMIT:-10}
+    restart: unless-stopped
+    volumes:
+      - ./.env:/app/.env:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
