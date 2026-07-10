@@ -37,6 +37,8 @@ def run_async(coro):
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 GIPHY_API_KEY = os.getenv('GIPHY_API_KEY')
 RESULTS_LIMIT = int(os.getenv('RESULTS_LIMIT', '10'))
+GIPHY_RATING = os.getenv('GIPHY_RATING', 'pg-13')
+GIPHY_LANGUAGE = os.getenv('GIPHY_LANGUAGE', '')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 PORT = int(os.getenv('PORT', 8000))
 
@@ -82,9 +84,11 @@ class GiphyAPI:
                 "q": query,
                 "limit": limit,
                 "offset": 0,
-                "rating": "g",
-                "lang": "it"
+                "rating": GIPHY_RATING,
             }
+
+            if GIPHY_LANGUAGE:
+                params["lang"] = GIPHY_LANGUAGE
 
             response = requests.get(
                 f"{self.BASE_URL}/search",
@@ -115,7 +119,7 @@ class GiphyAPI:
                 "api_key": self.api_key,
                 "limit": limit,
                 "offset": 0,
-                "rating": "g"
+                "rating": GIPHY_RATING
             }
 
             response = requests.get(
@@ -190,10 +194,14 @@ def handle_inline_query(inline_query):
             results.append(result)
 
         # Log query
-        logger.info(f"Inline query '{query}' - {len(results)} results for user {inline_query.from_user.id}")
+        if query and not results:
+            logger.info(f"Inline query '{query}' - no results for user {inline_query.from_user.id}")
+        else:
+            logger.info(f"Inline query '{query}' - {len(results)} results for user {inline_query.from_user.id}")
 
         # Send results to Telegram
-        run_async(inline_query.answer(results, cache_time=300))
+        cache_time = 30 if query and not results else 300
+        run_async(inline_query.answer(results, cache_time=cache_time))
 
     except Exception as e:
         logger.error(f"Error in inline query handler: {e}")

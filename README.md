@@ -46,6 +46,8 @@ Fork this repo to your GitHub account.
    - `GIPHY_API_KEY` = Your Giphy API key
    - `WEBHOOK_URL` = Your app URL (e.g., `https://telegram-gif-bot-xxx.com`)
    - `RESULTS_LIMIT` = `10`
+   - `GIPHY_RATING` = `pg-13` for broader results, or `g` for stricter filtering
+   - `GIPHY_LANGUAGE` = Optional language code such as `en` or `it`
 5. Click **Deploy**
 
 ### 4. Set Bot Webhook in Telegram
@@ -61,6 +63,8 @@ Replace:
 - `<YOUR_WEBHOOK_URL>` with your web service URL (e.g., `https://telegram-gif-bot-xxx.com`)
 
 Done! Your bot is now live and event-driven 🎉
+
+Note: on free hosting plans the service may sleep or restart when idle, which can look like the machine turning off. If you need it always available, use a plan that stays online.
 
 ## 🚀 Usage
 
