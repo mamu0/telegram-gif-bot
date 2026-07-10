@@ -2,7 +2,7 @@
 """
 Telegram bot for inline GIF search using Giphy API.
 
-Event-driven webhook-based bot that runs on Render.
+Event-driven webhook-based bot.
 Receives requests only when users interact with inline queries.
 """
 
