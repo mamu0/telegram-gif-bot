@@ -9,6 +9,7 @@ Receives requests only when users interact with inline queries.
 import os
 import logging
 import asyncio
+import hashlib
 import requests
 from typing import List
 from dotenv import load_dotenv
@@ -192,9 +193,14 @@ def handle_inline_query(inline_query):
 
         # Build results
         results = []
+        query_key = hashlib.sha1(query.encode('utf-8')).hexdigest()[:10]
         for i, gif in enumerate(gifs):
             images = gif.get('images', {})
-            gif_image = images.get('fixed_height_downsampled') or images.get('fixed_height') or images.get('original')
+            gif_image = (
+                images.get('fixed_height_downsampled')
+                or images.get('fixed_height_small')
+                or images.get('fixed_height')
+            )
             thumbnail_image = images.get('fixed_height_small_still') or images.get('fixed_height_small') or gif_image
             gif_url = gif_image.get('url') if gif_image else None
             thumbnail_url = thumbnail_image.get('url') if thumbnail_image else None
@@ -204,9 +210,12 @@ def handle_inline_query(inline_query):
                 continue
 
             result = InlineQueryResultGif(
-                id=gif['id'],
+                id=f"{gif['id']}-{query_key}",
                 gif_url=gif_url,
                 thumbnail_url=thumbnail_url,
+                gif_width=int(gif_image.get('width')) if gif_image.get('width') else None,
+                gif_height=int(gif_image.get('height')) if gif_image.get('height') else None,
+                thumbnail_mime_type='image/gif',
                 title=gif.get('title', f'GIF {i+1}'),
             )
             results.append(result)
@@ -219,7 +228,7 @@ def handle_inline_query(inline_query):
 
         # Send results to Telegram
         cache_time = EMPTY_QUERY_CACHE_SECONDS if not query else 0
-        run_async(inline_query.answer(results, cache_time=cache_time))
+        run_async(inline_query.answer(results, cache_time=cache_time, is_personal=True))
 
     except Exception as e:
         logger.error(f"Error in inline query handler: {e}")
