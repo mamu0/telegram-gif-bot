@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 from flask import Flask, request, jsonify
 from telegram import Update, InlineQueryResultGif, Bot
+from telegram.request import HTTPXRequest
 from telegram.error import BadRequest
 
 # Load environment variables from .env file
@@ -47,7 +48,11 @@ if not GIPHY_API_KEY:
 
 # Initialize Flask app
 app = Flask(__name__)
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
+telegram_request = HTTPXRequest(
+    connection_pool_size=int(os.getenv('TELEGRAM_CONNECTION_POOL_SIZE', '8')),
+    pool_timeout=float(os.getenv('TELEGRAM_POOL_TIMEOUT', '10.0')),
+)
+bot = Bot(token=TELEGRAM_BOT_TOKEN, request=telegram_request)
 
 
 class GiphyAPI:
