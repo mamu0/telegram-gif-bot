@@ -8,12 +8,14 @@ Receives requests only when users interact with inline queries.
 
 import os
 import logging
+import asyncio
 import requests
 from typing import List
 from dotenv import load_dotenv
 
 from flask import Flask, request, jsonify
 from telegram import Update, InlineQueryResultGif, Bot
+from telegram.request import HTTPXRequest
 from telegram.error import BadRequest
 
 # Load environment variables from .env file
@@ -25,6 +27,11 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+
+def run_async(coro):
+    """Run a Telegram coroutine from synchronous Flask code."""
+    return telegram_loop.run_until_complete(coro)
 
 # Environment variables
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -41,7 +48,13 @@ if not GIPHY_API_KEY:
 
 # Initialize Flask app
 app = Flask(__name__)
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
+telegram_request = HTTPXRequest(
+    connection_pool_size=int(os.getenv('TELEGRAM_CONNECTION_POOL_SIZE', '8')),
+    pool_timeout=float(os.getenv('TELEGRAM_POOL_TIMEOUT', '10.0')),
+)
+bot = Bot(token=TELEGRAM_BOT_TOKEN, request=telegram_request)
+telegram_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(telegram_loop)
 
 
 class GiphyAPI:
@@ -180,12 +193,12 @@ def handle_inline_query(inline_query):
         logger.info(f"Inline query '{query}' - {len(results)} results for user {inline_query.from_user.id}")
 
         # Send results to Telegram
-        inline_query.answer(results, cache_time=300)
+        run_async(inline_query.answer(results, cache_time=300))
 
     except Exception as e:
         logger.error(f"Error in inline query handler: {e}")
         try:
-            inline_query.answer([], cache_time=10)
+            run_async(inline_query.answer([], cache_time=10))
         except:
             pass
 
@@ -193,12 +206,12 @@ def handle_inline_query(inline_query):
 def handle_start(update):
     """Handle /start command."""
     try:
-        update.message.reply_text(
+        run_async(update.message.reply_text(
             "👋 Welcome to GIF Bot!\n\n"
             "Use the bot inline by typing my username followed by your search.\n\n"
             "Example: @gif_bot hello\n\n"
             "Type /help for more information."
-        )
+        ))
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
 
@@ -220,7 +233,7 @@ def handle_help(update):
             "/start - Show welcome message\n"
             "/help - Show this guide"
         )
-        update.message.reply_text(help_text, parse_mode="HTML")
+        run_async(update.message.reply_text(help_text, parse_mode="HTML"))
     except Exception as e:
         logger.error(f"Error in help handler: {e}")
 
@@ -247,7 +260,7 @@ def set_webhook():
     try:
         if WEBHOOK_URL:
             url = f"{WEBHOOK_URL}/webhook"
-            bot.set_webhook(url=url, drop_pending_updates=True)
+            run_async(bot.set_webhook(url=url, drop_pending_updates=True))
             logger.info(f"Webhook set to {url}")
         else:
             logger.warning("WEBHOOK_URL not set, webhook may not work")
