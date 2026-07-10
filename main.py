@@ -14,7 +14,7 @@ from typing import List
 from dotenv import load_dotenv
 
 from flask import Flask, request, jsonify
-from telegram import Update, InlineQueryResultGif, InlineQueryResultMpeg4Gif, Bot
+from telegram import Update, InlineQueryResultGif, Bot
 from telegram.request import HTTPXRequest
 from telegram.error import BadRequest
 
@@ -92,19 +92,26 @@ class GiphyAPI:
             if GIPHY_LANGUAGE:
                 params["lang"] = GIPHY_LANGUAGE
 
-            response = requests.get(
-                f"{self.BASE_URL}/search",
-                params=params,
-                timeout=5
-            )
-            response.raise_for_status()
+            results = self._request_search(params)
+            if results or not GIPHY_LANGUAGE:
+                return results
 
-            data = response.json()
-            return data.get("data", [])
+            # Some terms have no localized match even when Giphy has results.
+            params.pop("lang")
+            return self._request_search(params)
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Error searching Giphy: {e}")
             return []
+
+    def _request_search(self, params: dict) -> List[dict]:
+        response = requests.get(
+            f"{self.BASE_URL}/search",
+            params=params,
+            timeout=5
+        )
+        response.raise_for_status()
+        return response.json().get("data", [])
 
     def trending(self, limit: int = 10) -> List[dict]:
         """
@@ -187,22 +194,21 @@ def handle_inline_query(inline_query):
         results = []
         for i, gif in enumerate(gifs):
             images = gif.get('images', {})
-            mpeg4_url = images.get('fixed_height_small', {}).get('mp4')
+            gif_image = images.get('fixed_height_downsampled') or images.get('fixed_height') or images.get('original')
+            thumbnail_image = images.get('fixed_height_small_still') or images.get('fixed_height_small') or gif_image
+            gif_url = gif_image.get('url') if gif_image else None
+            thumbnail_url = thumbnail_image.get('url') if thumbnail_image else None
 
-            if mpeg4_url:
-                result = InlineQueryResultMpeg4Gif(
-                    id=gif['id'],
-                    mpeg4_url=mpeg4_url,
-                    thumbnail_url=images.get('fixed_height_small_still', {}).get('url', images.get('fixed_height_small', {}).get('url')),
-                    title=gif.get('title', f'GIF {i+1}'),
-                )
-            else:
-                result = InlineQueryResultGif(
-                    id=gif['id'],
-                    gif_url=images.get('original', {}).get('url'),
-                    thumbnail_url=images.get('fixed_height_small', {}).get('url'),
-                    title=gif.get('title', f'GIF {i+1}'),
-                )
+            if not gif.get('id') or not gif_url or not thumbnail_url:
+                logger.warning("Skipping incomplete Giphy result %s", gif.get('id', '<unknown>'))
+                continue
+
+            result = InlineQueryResultGif(
+                id=gif['id'],
+                gif_url=gif_url,
+                thumbnail_url=thumbnail_url,
+                title=gif.get('title', f'GIF {i+1}'),
+            )
             results.append(result)
 
         # Log query
@@ -212,7 +218,7 @@ def handle_inline_query(inline_query):
             logger.info(f"Inline query '{query}' - {len(results)} results for user {inline_query.from_user.id}")
 
         # Send results to Telegram
-        cache_time = EMPTY_QUERY_CACHE_SECONDS if not query else INLINE_QUERY_CACHE_SECONDS
+        cache_time = EMPTY_QUERY_CACHE_SECONDS if not query else 0
         run_async(inline_query.answer(results, cache_time=cache_time))
 
     except Exception as e:
