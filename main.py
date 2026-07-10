@@ -8,6 +8,7 @@ Receives requests only when users interact with inline queries.
 
 import os
 import logging
+import asyncio
 import requests
 from typing import List
 from dotenv import load_dotenv
@@ -25,6 +26,11 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+
+def run_async(coro):
+    """Run a Telegram coroutine from synchronous Flask code."""
+    return asyncio.run(coro)
 
 # Environment variables
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -180,12 +186,12 @@ def handle_inline_query(inline_query):
         logger.info(f"Inline query '{query}' - {len(results)} results for user {inline_query.from_user.id}")
 
         # Send results to Telegram
-        inline_query.answer(results, cache_time=300)
+        run_async(inline_query.answer(results, cache_time=300))
 
     except Exception as e:
         logger.error(f"Error in inline query handler: {e}")
         try:
-            inline_query.answer([], cache_time=10)
+            run_async(inline_query.answer([], cache_time=10))
         except:
             pass
 
@@ -193,12 +199,12 @@ def handle_inline_query(inline_query):
 def handle_start(update):
     """Handle /start command."""
     try:
-        update.message.reply_text(
+        run_async(update.message.reply_text(
             "👋 Welcome to GIF Bot!\n\n"
             "Use the bot inline by typing my username followed by your search.\n\n"
             "Example: @gif_bot hello\n\n"
             "Type /help for more information."
-        )
+        ))
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
 
@@ -220,7 +226,7 @@ def handle_help(update):
             "/start - Show welcome message\n"
             "/help - Show this guide"
         )
-        update.message.reply_text(help_text, parse_mode="HTML")
+        run_async(update.message.reply_text(help_text, parse_mode="HTML"))
     except Exception as e:
         logger.error(f"Error in help handler: {e}")
 
