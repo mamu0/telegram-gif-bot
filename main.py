@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 def run_async(coro):
     """Run a Telegram coroutine from synchronous Flask code."""
-    return asyncio.run(coro)
+    return telegram_loop.run_until_complete(coro)
 
 # Environment variables
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -53,6 +53,8 @@ telegram_request = HTTPXRequest(
     pool_timeout=float(os.getenv('TELEGRAM_POOL_TIMEOUT', '10.0')),
 )
 bot = Bot(token=TELEGRAM_BOT_TOKEN, request=telegram_request)
+telegram_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(telegram_loop)
 
 
 class GiphyAPI:
@@ -258,7 +260,7 @@ def set_webhook():
     try:
         if WEBHOOK_URL:
             url = f"{WEBHOOK_URL}/webhook"
-            bot.set_webhook(url=url, drop_pending_updates=True)
+            run_async(bot.set_webhook(url=url, drop_pending_updates=True))
             logger.info(f"Webhook set to {url}")
         else:
             logger.warning("WEBHOOK_URL not set, webhook may not work")
