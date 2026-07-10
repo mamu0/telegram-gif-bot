@@ -55,6 +55,8 @@ This guide covers both deployment on **Web Service** (recommended, serverless) a
    | `GIPHY_API_KEY` | Your Giphy API key |
    | `WEBHOOK_URL` | `https://telegram-gif-bot-xxx.com` (you'll get this URL) |
    | `RESULTS_LIMIT` | `10` |
+   | `GIPHY_RATING` | `pg-13` for broader results, or `g` for stricter filtering |
+   | `GIPHY_LANGUAGE` | Optional language code such as `en` or `it` |
 
    **Note**: After you click "Create Web Service", you'll get a URL like `https://telegram-gif-bot-xxxxx.com`. Use this for `WEBHOOK_URL`.
 
@@ -201,6 +203,10 @@ For local testing with real Telegram updates, use **Ngrok**:
 1. Check Web Service shows "Live" status
 2. Verify webhook URL: `https://api.telegram.org/bot<TOKEN>/getWebhookInfo`
 3. Check Web Service logs for errors
+
+### Service Stops or Restarts
+
+If the hosting provider uses a free plan, it may suspend or restart the service when idle. That is expected platform behavior and can look like the machine turning off.
 
 ---
 
