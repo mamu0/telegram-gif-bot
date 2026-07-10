@@ -14,7 +14,7 @@ from typing import List
 from dotenv import load_dotenv
 
 from flask import Flask, request, jsonify
-from telegram import Update, InlineQueryResultGif, Bot
+from telegram import Update, InlineQueryResultGif, InlineQueryResultMpeg4Gif, Bot
 from telegram.request import HTTPXRequest
 from telegram.error import BadRequest
 
@@ -39,6 +39,8 @@ GIPHY_API_KEY = os.getenv('GIPHY_API_KEY')
 RESULTS_LIMIT = int(os.getenv('RESULTS_LIMIT', '10'))
 GIPHY_RATING = os.getenv('GIPHY_RATING', 'pg-13')
 GIPHY_LANGUAGE = os.getenv('GIPHY_LANGUAGE', '')
+INLINE_QUERY_CACHE_SECONDS = int(os.getenv('INLINE_QUERY_CACHE_SECONDS', '30'))
+EMPTY_QUERY_CACHE_SECONDS = int(os.getenv('EMPTY_QUERY_CACHE_SECONDS', '300'))
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 PORT = int(os.getenv('PORT', 8000))
 
@@ -184,13 +186,23 @@ def handle_inline_query(inline_query):
         # Build results
         results = []
         for i, gif in enumerate(gifs):
-            result = InlineQueryResultGif(
-                id=gif['id'],
-                gif_url=gif['images']['original']['url'],
-                thumbnail_url=gif['images']['fixed_height_small']['url'],
-                title=gif.get('title', f'GIF {i+1}'),
-                caption=gif.get('title', ''),
-            )
+            images = gif.get('images', {})
+            mpeg4_url = images.get('fixed_height_small', {}).get('mp4')
+
+            if mpeg4_url:
+                result = InlineQueryResultMpeg4Gif(
+                    id=gif['id'],
+                    mpeg4_url=mpeg4_url,
+                    thumbnail_url=images.get('fixed_height_small_still', {}).get('url', images.get('fixed_height_small', {}).get('url')),
+                    title=gif.get('title', f'GIF {i+1}'),
+                )
+            else:
+                result = InlineQueryResultGif(
+                    id=gif['id'],
+                    gif_url=images.get('original', {}).get('url'),
+                    thumbnail_url=images.get('fixed_height_small', {}).get('url'),
+                    title=gif.get('title', f'GIF {i+1}'),
+                )
             results.append(result)
 
         # Log query
@@ -200,7 +212,7 @@ def handle_inline_query(inline_query):
             logger.info(f"Inline query '{query}' - {len(results)} results for user {inline_query.from_user.id}")
 
         # Send results to Telegram
-        cache_time = 30 if query and not results else 300
+        cache_time = EMPTY_QUERY_CACHE_SECONDS if not query else INLINE_QUERY_CACHE_SECONDS
         run_async(inline_query.answer(results, cache_time=cache_time))
 
     except Exception as e:
