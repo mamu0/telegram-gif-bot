@@ -9,6 +9,7 @@ Receives requests only when users interact with inline queries.
 import os
 import logging
 import asyncio
+import hashlib
 import requests
 from typing import List
 from dotenv import load_dotenv
@@ -27,6 +28,8 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 
 def run_async(coro):
@@ -39,6 +42,8 @@ GIPHY_API_KEY = os.getenv('GIPHY_API_KEY')
 RESULTS_LIMIT = int(os.getenv('RESULTS_LIMIT', '10'))
 GIPHY_RATING = os.getenv('GIPHY_RATING', 'pg-13')
 GIPHY_LANGUAGE = os.getenv('GIPHY_LANGUAGE', '')
+INLINE_QUERY_CACHE_SECONDS = int(os.getenv('INLINE_QUERY_CACHE_SECONDS', '30'))
+EMPTY_QUERY_CACHE_SECONDS = int(os.getenv('EMPTY_QUERY_CACHE_SECONDS', '300'))
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 PORT = int(os.getenv('PORT', 8000))
 
@@ -90,19 +95,26 @@ class GiphyAPI:
             if GIPHY_LANGUAGE:
                 params["lang"] = GIPHY_LANGUAGE
 
-            response = requests.get(
-                f"{self.BASE_URL}/search",
-                params=params,
-                timeout=5
-            )
-            response.raise_for_status()
+            results = self._request_search(params)
+            if results or not GIPHY_LANGUAGE:
+                return results
 
-            data = response.json()
-            return data.get("data", [])
+            # Some terms have no localized match even when Giphy has results.
+            params.pop("lang")
+            return self._request_search(params)
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Error searching Giphy: {e}")
             return []
+
+    def _request_search(self, params: dict) -> List[dict]:
+        response = requests.get(
+            f"{self.BASE_URL}/search",
+            params=params,
+            timeout=5
+        )
+        response.raise_for_status()
+        return response.json().get("data", [])
 
     def trending(self, limit: int = 10) -> List[dict]:
         """
@@ -183,13 +195,30 @@ def handle_inline_query(inline_query):
 
         # Build results
         results = []
+        query_key = hashlib.sha1(query.encode('utf-8')).hexdigest()[:10]
         for i, gif in enumerate(gifs):
+            images = gif.get('images', {})
+            gif_image = (
+                images.get('fixed_height')
+                or images.get('fixed_height_small')
+                or images.get('fixed_height_downsampled')
+            )
+            thumbnail_image = images.get('fixed_height_small_still') or images.get('fixed_height_small') or gif_image
+            gif_url = gif_image.get('url') if gif_image else None
+            thumbnail_url = thumbnail_image.get('url') if thumbnail_image else None
+
+            if not gif.get('id') or not gif_url or not thumbnail_url:
+                logger.warning("Skipping incomplete Giphy result %s", gif.get('id', '<unknown>'))
+                continue
+
             result = InlineQueryResultGif(
-                id=gif['id'],
-                gif_url=gif['images']['original']['url'],
-                thumbnail_url=gif['images']['fixed_height_small']['url'],
+                id=f"{gif['id']}-{query_key}",
+                gif_url=gif_url,
+                thumbnail_url=thumbnail_url,
+                gif_width=int(gif_image.get('width')) if gif_image.get('width') else None,
+                gif_height=int(gif_image.get('height')) if gif_image.get('height') else None,
+                thumbnail_mime_type='image/gif',
                 title=gif.get('title', f'GIF {i+1}'),
-                caption=gif.get('title', ''),
             )
             results.append(result)
 
@@ -200,8 +229,8 @@ def handle_inline_query(inline_query):
             logger.info(f"Inline query '{query}' - {len(results)} results for user {inline_query.from_user.id}")
 
         # Send results to Telegram
-        cache_time = 30 if query and not results else 300
-        run_async(inline_query.answer(results, cache_time=cache_time))
+        cache_time = EMPTY_QUERY_CACHE_SECONDS if not query else 0
+        run_async(inline_query.answer(results, cache_time=cache_time, is_personal=True))
 
     except Exception as e:
         logger.error(f"Error in inline query handler: {e}")
