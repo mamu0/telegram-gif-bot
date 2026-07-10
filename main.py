@@ -199,9 +199,9 @@ def handle_inline_query(inline_query):
         for i, gif in enumerate(gifs):
             images = gif.get('images', {})
             gif_image = (
-                images.get('fixed_height_downsampled')
+                images.get('fixed_height')
                 or images.get('fixed_height_small')
-                or images.get('fixed_height')
+                or images.get('fixed_height_downsampled')
             )
             thumbnail_image = images.get('fixed_height_small_still') or images.get('fixed_height_small') or gif_image
             gif_url = gif_image.get('url') if gif_image else None
