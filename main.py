@@ -72,13 +72,14 @@ class GiphyAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    def search(self, query: str, limit: int = 10) -> List[dict]:
+    def search(self, query: str, limit: int = 10, offset: int = 0) -> List[dict]:
         """
         Search GIFs on Giphy.
 
         Args:
             query: Search term
             limit: Maximum number of results
+            offset: Number of results to skip (for pagination)
 
         Returns:
             List of found GIFs
@@ -88,7 +89,7 @@ class GiphyAPI:
                 "api_key": self.api_key,
                 "q": query,
                 "limit": limit,
-                "offset": 0,
+                "offset": offset,
                 "rating": GIPHY_RATING,
             }
 
@@ -116,12 +117,13 @@ class GiphyAPI:
         response.raise_for_status()
         return response.json().get("data", [])
 
-    def trending(self, limit: int = 10) -> List[dict]:
+    def trending(self, limit: int = 10, offset: int = 0) -> List[dict]:
         """
         Get trending GIFs.
 
         Args:
             limit: Maximum number of results
+            offset: Number of results to skip (for pagination)
 
         Returns:
             List of trending GIFs
@@ -130,7 +132,7 @@ class GiphyAPI:
             params = {
                 "api_key": self.api_key,
                 "limit": limit,
-                "offset": 0,
+                "offset": offset,
                 "rating": GIPHY_RATING
             }
 
@@ -187,11 +189,17 @@ def handle_inline_query(inline_query):
     try:
         query = inline_query.query.strip()
 
+        # Parse pagination offset sent by Telegram (empty string on first request)
+        try:
+            offset = int(inline_query.offset) if inline_query.offset else 0
+        except ValueError:
+            offset = 0
+
         # If no text, show trending GIFs
         if not query:
-            gifs = giphy_api.trending(limit=RESULTS_LIMIT)
+            gifs = giphy_api.trending(limit=RESULTS_LIMIT, offset=offset)
         else:
-            gifs = giphy_api.search(query, limit=RESULTS_LIMIT)
+            gifs = giphy_api.search(query, limit=RESULTS_LIMIT, offset=offset)
 
         # Build results
         results = []
@@ -212,7 +220,7 @@ def handle_inline_query(inline_query):
                 continue
 
             result = InlineQueryResultGif(
-                id=f"{gif['id']}-{query_key}",
+                id=f"{gif['id']}-{query_key}-{offset}",
                 gif_url=gif_url,
                 thumbnail_url=thumbnail_url,
                 gif_width=int(gif_image.get('width')) if gif_image.get('width') else None,
@@ -224,13 +232,22 @@ def handle_inline_query(inline_query):
 
         # Log query
         if query and not results:
-            logger.info(f"Inline query '{query}' - no results for user {inline_query.from_user.id}")
+            logger.info(f"Inline query '{query}' offset={offset} - no results for user {inline_query.from_user.id}")
         else:
-            logger.info(f"Inline query '{query}' - {len(results)} results for user {inline_query.from_user.id}")
+            logger.info(f"Inline query '{query}' offset={offset} - {len(results)} results for user {inline_query.from_user.id}")
+
+        # Tell Telegram the next offset to use when the user scrolls to the end.
+        # If fewer results than requested were returned, there are no more pages.
+        next_offset = str(offset + RESULTS_LIMIT) if len(results) == RESULTS_LIMIT else ""
 
         # Send results to Telegram
-        cache_time = EMPTY_QUERY_CACHE_SECONDS if not query else 0
-        run_async(inline_query.answer(results, cache_time=cache_time, is_personal=True))
+        cache_time = EMPTY_QUERY_CACHE_SECONDS if (not query and offset == 0) else 0
+        run_async(inline_query.answer(
+            results,
+            cache_time=cache_time,
+            is_personal=True,
+            next_offset=next_offset,
+        ))
 
     except Exception as e:
         logger.error(f"Error in inline query handler: {e}")
