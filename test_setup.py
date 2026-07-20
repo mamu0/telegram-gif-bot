@@ -1,128 +1,130 @@
 #!/usr/bin/env python3
 """
-Test script to verify configuration and connections.
+Manual integration check — verifies credentials and API connectivity.
+Run with: python test_setup.py
+
+For automated unit tests see: pytest tests/
 """
 
+import os
 import sys
-from config import Config
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
+GIPHY_RATING = os.getenv("GIPHY_RATING", "pg-13")
+REQUEST_TIMEOUT = 5
 
 
 def test_config():
-    """Test configuration."""
-    print("🔍 Testing configuration...\n")
+    """Verify required environment variables are set."""
+    print("🔍 Checking configuration...\n")
 
-    try:
-        Config.validate()
-        info = Config.get_info()
+    all_valid = True
+    for name, value in [
+        ("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN),
+        ("GIPHY_API_KEY", GIPHY_API_KEY),
+    ]:
+        if not value:
+            print(f"  ❌ {name} missing in .env")
+            all_valid = False
+        else:
+            print(f"  ✅ {name} = {value[:10]}...")
 
-        print("\n📋 Configuration loaded:")
-        for key, value in info.items():
-            print(f"   {key}: {value}")
-
-        return True
-    except ValueError as e:
-        print(f"❌ Configuration error: {e}")
-        return False
+    return all_valid
 
 
 def test_giphy_api():
-    """Test Giphy API."""
+    """Test Giphy API connectivity."""
     print("\n🔍 Testing Giphy API...\n")
+
+    if not GIPHY_API_KEY:
+        print("  ⚠️  Skipped — GIPHY_API_KEY not set")
+        return False
 
     try:
         import requests
-        from config import Config
 
-        # Test trending
         params = {
-            "api_key": Config.GIPHY_API_KEY,
+            "api_key": GIPHY_API_KEY,
             "limit": 1,
-            "rating": Config.GIPHY_RATING,
+            "rating": GIPHY_RATING,
         }
-
         response = requests.get(
             "https://api.giphy.com/v1/gifs/trending",
             params=params,
-            timeout=Config.REQUEST_TIMEOUT
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
-
         data = response.json()
+
         if data.get("data"):
-            print("✅ Giphy API works!")
-            print(f"   GIF found: {data['data'][0].get('title', 'Untitled')}")
+            title = data["data"][0].get("title", "Untitled")
+            print(f"  ✅ Giphy API OK — first trending: {title!r}")
             return True
-        else:
-            print("❌ No data from Giphy")
-            return False
+
+        print("  ❌ Giphy returned empty data")
+        return False
 
     except Exception as e:
-        print(f"❌ Giphy API error: {e}")
+        print(f"  ❌ Giphy API error: {e}")
         return False
 
 
 def test_telegram():
-    """Test Telegram connection."""
-    print("\n🔍 Testing Telegram Bot...\n")
+    """Test Telegram bot token (format check only — no network call)."""
+    print("\n🔍 Testing Telegram token...\n")
+
+    if not TELEGRAM_BOT_TOKEN:
+        print("  ⚠️  Skipped — TELEGRAM_BOT_TOKEN not set")
+        return False
 
     try:
         from telegram.ext import Application
-        from config import Config
 
-        # Build app without starting it
-        app = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
-
-        # If we reach here, token is at least formally valid
-        print("✅ Telegram token valid!")
-        print("   (Full verification available only during execution)")
+        Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+        print("  ✅ Telegram token format valid")
+        print("     (Full connectivity verified at runtime)")
         return True
 
     except Exception as e:
-        print(f"❌ Telegram error: {e}")
+        print(f"  ❌ Telegram error: {e}")
         return False
 
 
 def main():
-    """Run all tests."""
+    """Run all checks and print a summary."""
     print("=" * 50)
-    print("🤖 TELEGRAM GIPHY BOT TEST")
+    print("🤖  TELEGRAM GIF BOT — SETUP CHECK")
     print("=" * 50)
 
-    results = []
+    results = [
+        ("Configuration", test_config()),
+        ("Giphy API", test_giphy_api()),
+        ("Telegram Bot", test_telegram()),
+    ]
 
-    # Test 1: Configuration
-    results.append(("Configuration", test_config()))
-
-    # Test 2: Giphy API
-    results.append(("Giphy API", test_giphy_api()))
-
-    # Test 3: Telegram
-    results.append(("Telegram Bot", test_telegram()))
-
-    # Final report
     print("\n" + "=" * 50)
-    print("📊 TEST REPORT")
+    print("📊 RESULTS")
     print("=" * 50)
 
-    passed = sum(1 for _, result in results if result)
+    passed = sum(ok for _, ok in results)
     total = len(results)
 
-    for name, result in results:
-        status = "✅" if result else "❌"
-        print(f"{status} {name}")
+    for name, ok in results:
+        print(f"  {'✅' if ok else '❌'}  {name}")
 
-    print(f"\nResult: {passed}/{total} tests passed")
+    print(f"\n{passed}/{total} checks passed")
 
     if passed == total:
-        print("\n🎉 All tests passed! Bot is ready.")
-        print("\nTo start the bot, run:")
-        print("   python main.py")
-        return 0
+        print("\n🎉  All checks passed. Start the bot with: gunicorn main:app")
     else:
-        print("\n⚠️  Some tests failed.")
-        print("Check the configuration and tokens.")
-        return 1
+        print("\n⚠️   Fix the issues above, then re-run this script.")
+
+    return 0 if passed == total else 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

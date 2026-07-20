@@ -1,5 +1,7 @@
 # 🎬 Telegram GIF Bot
 
+[![CI](https://github.com/mamu0/telegram-gif-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/mamu0/telegram-gif-bot/actions/workflows/ci.yml)
+
 A **serverless, event-driven** Telegram bot that allows you to search and share GIFs from Giphy directly in chats using **inline queries**. 
 
 Runs as **webhooks** - only processes requests when users interact with it. No polling, no continuous server running.
@@ -45,6 +47,7 @@ Fork this repo to your GitHub account.
    - `TELEGRAM_BOT_TOKEN` = Your token from BotFather
    - `GIPHY_API_KEY` = Your Giphy API key
    - `WEBHOOK_URL` = Your app URL (e.g., `https://telegram-gif-bot-xxx.com`)
+   - `WEBHOOK_SECRET_TOKEN` = A random secret string (recommended, prevents spoofed webhook calls)
    - `RESULTS_LIMIT` = `10`
    - `GIPHY_RATING` = `pg-13` for broader results, or `g` for stricter filtering
    - `GIPHY_LANGUAGE` = Optional language code such as `en` or `it`
@@ -93,25 +96,29 @@ Type in any Telegram chat:
 
 ```
 .
-├── main.py                # Flask webhook handler
-├── config.py              # Configuration management
-├── utils.py               # Utility functions
+├── main.py                # Flask webhook handler + GiphyAPI client
+├── tests/                 # Pytest unit tests
+│   ├── conftest.py        # Test fixtures
+│   └── test_bot.py        # GiphyAPI and endpoint tests
 ├── requirements.txt       # Python dependencies
-├── Procfile              # Web service deployment config
-├── .env.example          # Example environment variables
-├── .gitignore            # Git ignore rules
-├── README.md             # This file
-├── INSTALLATION.md       # Detailed setup guide
-├── Dockerfile            # Docker configuration (optional)
-├── docker-compose.yml    # Docker Compose (optional)
-└── LICENSE               # MIT License
+├── Procfile               # Web service start command
+├── .env.example           # Example environment variables
+├── .github/workflows/     # GitHub Actions CI
+├── .gitignore
+├── README.md
+├── CHANGELOG.md
+├── INSTALLATION.md        # Detailed setup guide
+├── Dockerfile             # Docker configuration (optional)
+├── docker-compose.yml     # Docker Compose (optional)
+└── LICENSE
 ```
 
 ## 🔐 Security Notes
 
-- **DO NOT** commit your `.env` file - use environment variables on web services instead.
-- Keep your bot token secret
-- The webhook URL is public but secure (Telegram verifies requests)
+- **DO NOT** commit your `.env` file — use environment variables on web services instead.
+- Keep your bot token secret.
+- Set `WEBHOOK_SECRET_TOKEN` to a random string: the bot will verify every incoming webhook request against the `X-Telegram-Bot-Api-Secret-Token` header sent by Telegram, blocking spoofed payloads.
+- The webhook endpoint is public but protected by the secret token.
 
 ## 🔧 How It Works
 

@@ -11,7 +11,6 @@ import logging
 import asyncio
 import hashlib
 import requests
-from typing import List
 from dotenv import load_dotenv
 
 from flask import Flask, request, jsonify
@@ -45,6 +44,7 @@ GIPHY_LANGUAGE = os.getenv('GIPHY_LANGUAGE', '')
 INLINE_QUERY_CACHE_SECONDS = int(os.getenv('INLINE_QUERY_CACHE_SECONDS', '30'))
 EMPTY_QUERY_CACHE_SECONDS = int(os.getenv('EMPTY_QUERY_CACHE_SECONDS', '300'))
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+WEBHOOK_SECRET_TOKEN = os.getenv('WEBHOOK_SECRET_TOKEN')
 PORT = int(os.getenv('PORT', 8000))
 
 # Validate tokens
@@ -72,7 +72,7 @@ class GiphyAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    def search(self, query: str, limit: int = 10, offset: int = 0) -> List[dict]:
+    def search(self, query: str, limit: int = 10, offset: int = 0) -> list[dict]:
         """
         Search GIFs on Giphy.
 
@@ -108,7 +108,7 @@ class GiphyAPI:
             logger.error(f"Error searching Giphy: {e}")
             return []
 
-    def _request_search(self, params: dict) -> List[dict]:
+    def _request_search(self, params: dict) -> list[dict]:
         response = requests.get(
             f"{self.BASE_URL}/search",
             params=params,
@@ -117,7 +117,7 @@ class GiphyAPI:
         response.raise_for_status()
         return response.json().get("data", [])
 
-    def trending(self, limit: int = 10, offset: int = 0) -> List[dict]:
+    def trending(self, limit: int = 10, offset: int = 0) -> list[dict]:
         """
         Get trending GIFs.
 
@@ -158,9 +158,14 @@ giphy_api = GiphyAPI(GIPHY_API_KEY)
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
     """Handle incoming webhook requests from Telegram."""
+    if WEBHOOK_SECRET_TOKEN:
+        incoming = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
+        if incoming != WEBHOOK_SECRET_TOKEN:
+            return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
     try:
-        data = request.get_json()
-        
+        data = request.get_json(silent=True)
+
         if not data:
             return jsonify({'ok': False, 'error': 'No data received'}), 400
 
@@ -253,7 +258,7 @@ def handle_inline_query(inline_query):
         logger.error(f"Error in inline query handler: {e}")
         try:
             run_async(inline_query.answer([], cache_time=10))
-        except:
+        except Exception:
             pass
 
 
@@ -310,11 +315,15 @@ def index():
 
 
 def set_webhook():
-    """Set webhook URL in Telegram."""
+    """Register the webhook URL with Telegram."""
     try:
         if WEBHOOK_URL:
             url = f"{WEBHOOK_URL}/webhook"
-            run_async(bot.set_webhook(url=url, drop_pending_updates=True))
+            run_async(bot.set_webhook(
+                url=url,
+                drop_pending_updates=True,
+                secret_token=WEBHOOK_SECRET_TOKEN or None,
+            ))
             logger.info(f"Webhook set to {url}")
         else:
             logger.warning("WEBHOOK_URL not set, webhook may not work")
