@@ -1,14 +1,12 @@
 # 🎬 Telegram GIF Bot
 
-[![CI](https://github.com/mamu0/telegram-gif-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/mamu0/telegram-gif-bot/actions/workflows/ci.yml)
-
 A **serverless, event-driven** Telegram bot that allows you to search and share GIFs from Giphy directly in chats using **inline queries**. 
 
 Runs as **webhooks** - only processes requests when users interact with it. No polling, no continuous server running.
 
 ## ✨ Features
 
-- 🔍 **Inline Search**: Search for GIFs while typing in chat
+- 🔍 **Inline Searand CI setupch**: Search for GIFs while typing in chat
 - 🎯 **Giphy Integration**: Full access to Giphy's API
 - 📱 **Mobile Friendly**: Works perfectly on mobile devices
 - 🚀 **Easy to Use**: Simple and intuitive interface
